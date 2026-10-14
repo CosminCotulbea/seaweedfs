@@ -60,14 +60,16 @@ APP_ENV=production
 PROXY_MODE=host
 HOST_PORT=19100                # any free port; each stack on the host needs its own
 HOST_CONF_PATH=/etc/nginx/sites-available/seaweedfs.conf
+HOST_WWW=false                 # true also serves and certifies www.<DOMAIN_HOST>
 DOMAIN_HOST=...                # its DNS record must already point at this server
 DOMAIN_EMAIL=...
 ```
 
 `start.sh` and `build.sh` then publish `seaweedfs-nginx` on `127.0.0.1:HOST_PORT` only, write the
 vhost from `scripts/nginx/host/*.conf` to `HOST_CONF_PATH`, obtain the certificate with
-`certbot certonly --nginx` and reload nginx. It is the same `host-proxy.sh` as the MinIO and Mailpit
-stacks — see the MinIO README for the requirements (sudo rules, handing over the vhost file).
+`certbot certonly --nginx` and reload nginx. The logic is `scripts/nginx/host/host-proxy.sh`, a
+library kept byte-identical with the MinIO, Mailpit and SRH repositories — see the MinIO README for the
+requirements (sudo rules, handing over the vhost file).
 
 ## Available scripts
 

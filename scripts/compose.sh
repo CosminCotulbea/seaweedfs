@@ -58,6 +58,15 @@ if grep -q '^APP_ENV=production[[:space:]]*$' .env; then
     echo
 fi
 
+# PROXY_MODE support (nginx/host/host-proxy.sh, shared with other repositories).
 # The container the host nginx proxies to under PROXY_MODE=host.
+HOST_PROXY_DIR=nginx/host
 HOST_PROXY_CONTAINER=seaweedfs-nginx
-. ./host-proxy.sh
+# shellcheck source=nginx/host/host-proxy.sh
+. "$HOST_PROXY_DIR/host-proxy.sh"
+host_proxy_load
+
+# HOST_PORT is published by docker-compose.prod.yml only.
+if [ "$PROXY_MODE" = host ] && ! grep -q '^APP_ENV=production[[:space:]]*$' .env; then
+    host_proxy_fail "PROXY_MODE=host needs APP_ENV=production — HOST_PORT is published by docker-compose.prod.yml"
+fi
