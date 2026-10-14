@@ -1,0 +1,80 @@
+services:
+    seaweedfs-nginx:
+        container_name: seaweedfs-nginx
+        image: nginx:${NGINX_VERSION}
+        restart: unless-stopped
+        volumes:
+            - ./nginx/custom.conf:/etc/nginx/conf.d/default.conf:ro
+        ports:
+            - "80"
+        depends_on:
+            seaweedfs:
+                condition: service_healthy
+            seaweedfs-admin:
+                condition: service_started
+        environment:
+            VIRTUAL_HOST: ${DOMAIN_HOST}
+            SELF_SIGNED_HOST: ${SELF_SIGNED_HOST}
+            VIRTUAL_PORT: 80
+            LETSENCRYPT_HOST: ${DOMAIN_HOST}
+            LETSENCRYPT_EMAIL: ${DOMAIN_EMAIL}
+            # nginx-proxy's own switch: `noredirect` serves http and https side by side
+            # instead of redirecting http to https.
+            HTTPS_METHOD: ${HTTPS_METHOD:-redirect}
+        labels:
+            - com.github.nginx-proxy.nginx-proxy.ssl_verify_client=off
+        networks:
+            - nginx-proxy
+            - seaweedfs
+
+    # Master, volume server, filer and S3 gateway in one process — the
+    # single-node layout. Users, keys, policies and buckets live in the filer
+    # under /data, so they survive restarts and are managed with `weed shell`
+    # (credentials.sh, policy.sh, shell.sh) rather than a static config file.
+    seaweedfs:
+        container_name: seaweedfs
+        image: chrislusf/seaweedfs:${SEAWEEDFS_VERSION}
+        restart: unless-stopped
+        # -volume.max=0 sizes the volume count from free disk space. The volume
+        # size limit is lowered from the 30GB default because every bucket gets
+        # volumes of its own: at 30GB each, a small disk fits only a few buckets.
+        command: >-
+            server
+            -dir=/data
+            -ip=seaweedfs
+            -ip.bind=0.0.0.0
+            -master.volumeSizeLimitMB=${SEAWEEDFS_VOLUME_SIZE_LIMIT_MB:-1024}
+            -volume.max=0
+            -s3
+        volumes:
+            - ../data/seaweedfs:/data
+        networks:
+            - seaweedfs
+        healthcheck:
+            # The S3 gateway is the last component up, and answers 403 to an
+            # anonymous request on / — any HTTP answer means it is serving.
+            test: [ "CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8333/ | grep -qv '^000$'" ]
+            interval: 5s
+            timeout: 3s
+            retries: 20
+
+    seaweedfs-admin:
+        container_name: seaweedfs-admin
+        image: chrislusf/seaweedfs:${SEAWEEDFS_VERSION}
+        restart: unless-stopped
+        command: admin -port=23646 -master=seaweedfs:9333 -dataDir=/data
+        environment:
+            WEED_ADMIN_USER: ${ADMIN_USER}
+            WEED_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+        volumes:
+            - ../data/admin:/data
+        depends_on:
+            seaweedfs:
+                condition: service_healthy
+        networks:
+            - seaweedfs
+
+networks:
+    seaweedfs:
+    nginx-proxy:
+        external: true

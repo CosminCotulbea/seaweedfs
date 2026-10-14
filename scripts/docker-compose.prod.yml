@@ -1,0 +1,17 @@
+services:
+    seaweedfs-nginx:
+        # Loopback only, for PROXY_MODE=host: the server's own nginx owns 80/443
+        # and proxies to this port. Compose has no conditionals, so the entry
+        # exists in both modes — under nginx-proxy HOST_PORT is unset and Docker
+        # picks a random port, still bound to 127.0.0.1 and so unreachable from
+        # outside; nginx-proxy keeps reaching the container over the shared network.
+        ports: !override
+            - "127.0.0.1:${HOST_PORT:-}:80"
+        environment:
+            # Local only: self-signed-proxy-companion issues a throwaway cert for
+            # the .local hostname. In production LETSENCRYPT_HOST is what the
+            # proxy acts on, and leaving this set would have the companion
+            # overwrite that real certificate with a self-signed one.
+            # !reset on the single key — `environment` is a mapping here, so
+            # Compose merges it key by key and the rest of the block survives.
+            SELF_SIGNED_HOST: !reset null
